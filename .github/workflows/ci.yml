@@ -1,0 +1,124 @@
+name: Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15
+
+      - name: Go vet
+        run: go vet ./...
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Go version
+        run: go version
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Generate test log
+        run: |
+          go test -v ./... > test.log
+          cat test.log
+
+      - name: Upload test log
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests
+          path: test.log
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Build
+        run: |
+          mkdir -p dist
+          go build -o dist/notas .
+
+      - name: Show binary
+        run: ls -l dist/notas
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: app
+          path: dist
+
+  package:
+    runs-on: ubuntu-latest
+    needs: [lint, test, build]
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v8
+        with:
+          name: app
+          path: dist
+
+      - name: Download test log
+        uses: actions/download-artifact@v8
+        with:
+          name: tests
+          path: informes
+
+      - name: List files
+        run: ls -l dist informes
+
+      - name: Run app
+        run: |
+          chmod +x dist/notas
+          ./dist/notas | tee salida.txt
+
+      - name: Check output
+        run: grep "nota lista" salida.txt
+
+      - name: Show test log
+        run: cat informes/test.log
